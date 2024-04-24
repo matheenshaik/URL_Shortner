@@ -6,19 +6,17 @@ const { promisify } = require("util");
 
 //Connect to redis
 const redisClient = redis.createClient(
-    13406,
-    "redis-13406.c301.ap-south-1-1.ec2.cloud.redislabs.com",
-    { no_ready_check: true }
+    12705,
+    "redis-12705.c264.ap-south-1-1.ec2.redns.redis-cloud.com",
+    { no_ready_check: true } //inhibit checking
 );
-redisClient.auth("vrKvqADStxNAcnU3Kv8jAz9p40rUY0GV", function (err) {
-    if (err) throw err;
+redisClient.auth("38EIdvVda4jSyAAWY2mSt0JzRgoJJhzA", function (err) {
+    if (err) throw err
 });
 
 redisClient.on("connect", async function () {
-    console.log("Connected to Redis..");
+    console.log("Connected to Redis..")    
 });
-
-
 
 
 
@@ -52,7 +50,7 @@ const createURL = async function (req, res) {
         const longUrl = data.longUrl
         //checking longUrl validation
         if (!isValid(longUrl)) {
-            return res.status(400).send({ status: false, message: "Please provide URL" })
+            return res.status(400).send({ status: false, message: "Please provide only long URL" })
         }
 
         if (!validUrl.isWebUri(longUrl)) {
@@ -69,15 +67,18 @@ const createURL = async function (req, res) {
         //set data to cache
         await SET_ASYNC(`${longUrl}`, JSON.stringify(uniqueUrl));
         if (uniqueUrl) {
-            return res.status(200).send({ status: true, shortUrl: uniqueUrl.shortUrl })
+            redisClient.expire(`${uniqueUrl}`, 300, function(err, data) {
+                if (err) {
+                    console.log(err.message)
+                } else {
+                    console.log("TTL set for long URL key:", data)
+                }
+            });
+            return res.status(201).send({ status: true, shortUrl: uniqueUrl.shortUrl })
         }
         //generating url code
-        const urlCode = shortid.generate()
-        //checking unique urlcode
-        let alreadyURl = await urlModel.findOne({ urlCode: urlCode })
-        if (alreadyURl) {
-            return res.status(409).send({ status: true, message: "URL already exist" })
-        }
+        const urlCode = shortid.generate().toLowerCase()
+
         //creating short url
         let baseUrl = "http://localhost:3000/"
         let shortUrl = baseUrl + urlCode
@@ -88,7 +89,7 @@ const createURL = async function (req, res) {
             "urlCode": urlCode
         }
         //creating Data inside DataBase
-        let createUrl = await urlModel.create(Data)
+        await urlModel.create(Data)
         return res.status(201).send({ status: true, message: "URL shortened Successfully", data: Data })
 
     }
@@ -101,25 +102,31 @@ const createURL = async function (req, res) {
 
 const getUrl = async function (req, res) {
     try {
-
-        const urlCode = req.params.urlCode;
+        const urlCode = req.params.urlCode
+        redisClient.expire(`${urlCode}`, 300, function(err, data) {
+            if (err) {
+                console.log(err)
+            } else {
+                console.log("TTL set for URL code key:", data)
+            }
+        });
         let cachedData = await GET_ASYNC(`${urlCode}`)
         cachedData = JSON.parse(cachedData)
         if (cachedData) {
-            return res.status(200).redirect(cachedData)
+            return res.status(302).redirect(cachedData)
         }
         else {
             let findURL = await urlModel.findOne({ urlCode: urlCode })
             if (!findURL) return res.status(404).send({ status: false, message: "No URL Found" })
             await SET_ASYNC(`${urlCode}`, JSON.stringify(findURL.longUrl))
-            return res.status(200).redirect(findURL.longUrl)
+            return res.status(302).redirect(findURL.longUrl)
         }
 
     }
     catch (err) {
-        return res.status(500).send({ status: false, message: err.message });
+        return res.status(500).send({ status: false, message: err.message })
     }
-};
+}
 
 
 

@@ -10,9 +10,10 @@ router.post("/url/shorten", urlController.createURL)
 //<-------------------- GET URL API ---------------------------->
 router.get("/:urlCode", urlController.getUrl)
 
-router.all("/*/",async function(req, res){
-    return res.status(404).send({status:false, message: "page not found"})
+router.all("/*", (req, res) => {
+    res.status(400).send({ status: false, message: "please provied valid path" }) 
 })
+
 
 
 module.exports = router
